@@ -733,9 +733,11 @@ public:
     Gdiplus::SolidBrush* brush;           // 画刷
     Gdiplus::Font* font;                  // 字体
     Gdiplus::SolidBrush* textBrush;       // 字体颜色
+
     unistring fontName;                   // 字体名字
     float fontSize;                       // 字体大小
     int fontStyle;                        // 字体样式
+    Gdiplus::Unit fontUnit;               // 字体单位大小
     bool fontIsChange;                    // 标记字体属性是否改变，如果属性改变就重新创建字体
 
     WNDPROC prevWndProc;                  // 如果是设置已有的窗口，保存已有窗口的消息处理函数
@@ -756,6 +758,7 @@ public:
     VG_MOUSE_EVENT OnMouseDown;
     VG_MOUSE_EVENT OnMouseUp;
     VG_MOUSE_EVENT OnMouseMove;
+    VG_SCROLL_EVENT OnScroll;
 
     // 计时器事件
     VG_TIMER_EVENT OnTimer;
@@ -790,9 +793,11 @@ public:
         fontName(MINIVG_DEFAULT_FONT),
         fontSize(12.0f),
         fontStyle(VG_NORMAL),
+        fontUnit(Gdiplus::UnitPoint),
+        fontIsChange(false),
 
         OnKeyDown(), OnKeyUp(), OnKeyPress(),
-        OnMouseDown(), OnMouseUp(), OnMouseMove(),
+        OnMouseDown(), OnMouseUp(), OnMouseMove(), OnScroll(),
         OnTimer(),
         OnPaint(),
 
@@ -880,7 +885,15 @@ public:
             // 重建位图和 Graphics
             pixelbuf = bm_create(width, height);
             SelectObject(hdc, pixelbuf);
+
+            // 测试映射模式
+            // SetMapMode(hdc, MM_TEXT);
+
             g = new Gdiplus::Graphics(hdc);
+            // g->SetPageUnit(Gdiplus::UnitPixel);
+            // g->SetPageScale(1.0f);
+            // g->ResetTransform();
+
             effect_level(effectLevel);
         }
 
@@ -985,6 +998,11 @@ public:
             if (OnMouseUp)
                 OnMouseUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), VG_MIDDLE);
             break;
+        case WM_MOUSEWHEEL:
+            if (OnScroll) {
+                OnScroll(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), GET_Y_LPARAM(wParam) / WHEEL_DELTA);
+            }
+            break;
 
         default:
             break;
@@ -999,6 +1017,8 @@ public:
     }
 
 protected:
+
+
     // 初始化 Gdiplus
     void gdiplusInit()
     {
@@ -1006,7 +1026,7 @@ protected:
 
         pen       = new Gdiplus::Pen(Gdiplus::Color::Black);
         brush     = new Gdiplus::SolidBrush(Gdiplus::Color::White);
-        font      = new Gdiplus::Font(fontName.c_str(), fontSize, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint, nullptr);
+        font      = new Gdiplus::Font(fontName.c_str(), fontSize, Gdiplus::FontStyleRegular, fontUnit, nullptr);
         textBrush = new Gdiplus::SolidBrush(Gdiplus::Color::Black);
 
         hdc = CreateCompatibleDC(nullptr);
@@ -1349,6 +1369,11 @@ MINIVG_INLINE void mouse_move_event(VG_MOUSE_EVENT function)
     detail::instance().OnMouseMove = function;
 }
 
+MINIVG_INLINE void scroll_event(VG_SCROLL_EVENT function)
+{
+    detail::instance().OnScroll = function;
+}
+
 // 计时器
 MINIVG_INLINE void start_timer(UINT interval)
 {
@@ -1483,6 +1508,9 @@ MINIVG_INLINE void set_graphics_effect_level(Gdiplus::Graphics* g, int level)
     default:
         break;
     }
+
+    // 调整文本渲染 Hint：减少 ClearType 导致的亚像素宽度偏差
+    g->SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
 }
 
 // 设置显示质量
@@ -1812,7 +1840,7 @@ MINIVG_INLINE void setfont(const unistring& name, float size, vgFontStyle style)
         delete detail::instance().font;
     }
 
-    detail::instance().font         = new Gdiplus::Font(name.c_str(), size, style, Gdiplus::UnitPoint, nullptr);
+    detail::instance().font         = new Gdiplus::Font(name.c_str(), size, style, detail::instance().fontUnit, nullptr);
     detail::instance().fontIsChange = false;
 }
 
@@ -1890,22 +1918,19 @@ MINIVG_INLINE void textout(float x, float y, const char* text, size_t length)
 
 MINIVG_INLINE void textout(float x, float y, const wchar_t* text, size_t length)
 {
-    detail::vgContext& vg = detail::instance();
-    if (vg.g) {
-        if (vg.fontIsChange) {
-            setfont(vg.fontName, vg.fontSize, vgFontStyle(vg.fontStyle));
-            vg.fontIsChange = false;
+    detail::vgContext& context = detail::instance();
+    if (context.g) {
+        if (context.fontIsChange) {
+            setfont(context.fontName, context.fontSize, vgFontStyle(context.fontStyle));
+            context.fontIsChange = false;
         }
 
-        Gdiplus::StringFormat format;
-        format.SetFormatFlags(Gdiplus::StringFormatFlagsNoFitBlackBox | Gdiplus::StringFormatFlagsDisplayFormatControl | Gdiplus::StringFormatFlagsLineLimit | Gdiplus::StringFormatFlagsNoClip);
-        vg.g->DrawString(
+        context.g->DrawString(
             text, static_cast<int>(length),
-            vg.font,
+            context.font,
             Gdiplus::PointF(x, y),
-            // Gdiplus::StringFormat::GenericTypographic(),
-            &format,
-            vg.textBrush
+            Gdiplus::StringFormat::GenericTypographic(),
+            context.textBrush
         );
     }
     else {
@@ -1949,7 +1974,11 @@ MINIVG_INLINE void drawtext(float x, float y, float width, float height, const u
         format.SetLineAlignment((Gdiplus::StringAlignment) vAlign); // 垂直对齐
         Gdiplus::RectF rect(x, y, width, height);
         detail::instance().g->DrawString(
-            text.c_str(), static_cast<int>(text.length()), detail::instance().font, rect, &format, detail::instance().textBrush
+            text.c_str(), static_cast<int>(text.length()),
+            detail::instance().font,
+            rect,
+            &format,
+            detail::instance().textBrush
         );
     }
 }
@@ -1992,20 +2021,26 @@ MINIVG_INLINE void print(float x, float y, const wchar_t* param, ...)
 // 获取字符串的像素宽高
 MINIVG_INLINE vec2f textsize(const unistring& text)
 {
-    if (detail::instance().g) {
-        Gdiplus::SizeF layoutSize(0, 0); // (FLT_MAX, FLT_MAX);
+    detail::vgContext& context = detail::instance();
+    if (context.g) {
+        if (context.fontIsChange) {
+            setfont(context.fontName, context.fontSize, vgFontStyle(context.fontStyle));
+            context.fontIsChange = false;
+        }
+
+        Gdiplus::SizeF layoutSize(FLT_MAX, FLT_MAX);
         Gdiplus::SizeF size;
-        Gdiplus::StringFormat format;
-        format.SetFormatFlags(Gdiplus::StringFormatFlagsNoFitBlackBox | Gdiplus::StringFormatFlagsDisplayFormatControl | Gdiplus::StringFormatFlagsLineLimit | Gdiplus::StringFormatFlagsNoClip);
-        format.SetTrimming(Gdiplus::StringTrimmingNone);
-        detail::instance().g->MeasureString(
+        Gdiplus::StringFormat format(Gdiplus::StringFormat::GenericTypographic());
+        format.SetFormatFlags(format.GetFormatFlags() | Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
+        context.g->MeasureString(
             text.c_str(), static_cast<int>(text.length()),
-            detail::instance().font,
+            context.font,
             layoutSize,
-            // Gdiplus::StringFormat::GenericTypographic(),
+            // Gdiplus::StringFormat::GenericTypographic(), // 会把末尾空格忽略
             &format,
             &size
         );
+
         return vec2f(size.Width, size.Height);
     }
     return vec2f();

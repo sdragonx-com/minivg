@@ -187,6 +187,9 @@ typedef void(*VG_KEY_EVENT)(int key);
 // 鼠标事件
 typedef void(*VG_MOUSE_EVENT)(int x, int y, int button);
 
+// 滚轴事件
+typedef void(*VG_SCROLL_EVENT)(int x, int y, int z);
+
 // 计时器事件
 typedef void(*VG_TIMER_EVENT)(float delay);
 
@@ -247,6 +250,7 @@ public:
     unistring(const wchar_t* str) : std::wstring(str) {}
     unistring(const wchar_t* str, size_t size) : std::wstring(str, size) {}
     unistring(const std::wstring& str) : std::wstring(str) {}
+    unistring(std::wstring::const_iterator begin, std::wstring::const_iterator end) : std::wstring(begin, end) {}
 
     // 整数转字符串
     unistring(int n) : std::wstring(to_string<wchar_t>(n)) {}
@@ -299,6 +303,13 @@ public:
 template<typename T>inline bool is_zero        (T      n) { return n == 0; };
 template<>          inline bool is_zero<float> (float  n) { return n < 0.0 ? (n > -FLT_EPSILON) : (n < FLT_EPSILON); }
 template<>          inline bool is_zero<double>(double n) { return n < 0.0 ? (n > -DBL_EPSILON) : (n < DBL_EPSILON); }
+
+// 把数值约束到范围内
+template<typename T>
+inline T clamp(const T& value, const T& min, const T& max)
+{
+    return value < min ? min : (value > max ? max : value);
+}
 
 // 判断数值是否相等
 template<typename T>
@@ -428,7 +439,7 @@ public:
 
     bool operator!=(const vec2& other) const
     {
-        return !is_equal(x, other.x) || !is_equal(y, other.y);
+        return !this->operator==(other);
     }
 };
 
@@ -440,7 +451,7 @@ public:
     {
         T data[4];
         struct { T x, y, z, w; }; // 空间坐标
-        struct { T b, g, r, a; }; // 颜色分量 (GDI 使用的是 BGRA)
+        struct { T r, g, b, a; }; // 颜色分量 (GDI 使用的是 BGRA)
     };
 
     vec4() : x(), y(), z(), w() {}
@@ -449,8 +460,23 @@ public:
 
     vec4& set(T _x, T _y, T _z, T _w) { x = _x; y = _y; z = _z; w = _w; return *this; }
 
+    VEC4_OPERATION(+);
+    VEC4_OPERATION(-);
+    VEC4_OPERATION(*);
+    VEC4_OPERATION(/);
+
           T& operator[](size_t i)       { return data[i]; }
     const T& operator[](size_t i) const { return data[i]; }
+
+    bool operator==(const vec4& other) const
+    {
+        return is_equal(x, other.x) && is_equal(y, other.y) && is_equal(z, other.z) && is_equal(w, other.w);
+    }
+
+    bool operator!=(const vec4& other) const
+    {
+        return !this->operator==(other);
+    }
 };
 
 typedef vec2<int>       vec2i;
@@ -569,7 +595,7 @@ public:
         h(height) { }
 
     // 返回点是否在矩形内
-    bool contaits(float x, float y) const
+    bool contains(float x, float y) const
     {
         return x > this->x &&
                y > this->y &&
@@ -577,14 +603,14 @@ public:
                y < this->y + this->h;
     }
 
-    bool contaits(const vec2i& v) const
+    bool contains(const vec2i& v) const
     {
-        return this->contaits(v.x, v.y);
+        return this->contains(v.x, v.y);
     }
 
-    bool contaits(const vec2f& v) const
+    bool contains(const vec2f& v) const
     {
-        return this->contaits(v.x, v.y);
+        return this->contains(v.x, v.y);
     }
 
     // 判断矩形是否相交
@@ -689,14 +715,14 @@ public:
     }
 
     // 判断包围盒是否包含点
-    bool contaits(float x, float y) const
+    bool contains(float x, float y) const
     {
         return x >= x1 && y >= y1 && x < x2 && y < y2;
     }
 
-    bool contaits(const vec2f& p) const
+    bool contains(const vec2f& p) const
     {
-        return this->contaits(p.x, p.y);
+        return this->contains(p.x, p.y);
     }
 
     // 判断两个包围盒是否相交
@@ -855,6 +881,7 @@ void input_event(VG_KEY_EVENT function);
 void mouse_push_event(VG_MOUSE_EVENT function);
 void mouse_pop_event(VG_MOUSE_EVENT function);
 void mouse_move_event(VG_MOUSE_EVENT function);
+void scroll_event(VG_SCROLL_EVENT function);
 
 /* 设置计时器
  * interval         计时器时间间隔，单位毫秒，输入 0 停止计时器
