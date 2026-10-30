@@ -623,7 +623,7 @@ public:
         float right  = min(x + w, other.x + other.w);
         float bottom = min(y + h, other.y + other.h);
 
-        return (right - left) > 0.0f && (bottom - top) > 0.0f;
+        return left <right && top < bottom;
     }
 };
 
