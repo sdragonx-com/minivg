@@ -905,7 +905,7 @@ void display_event(VG_PAINT_EVENT function);
 void cliprect(int x, int y, int width, int height);
 
 // 压入剪裁矩形
-void push_cliprect(int x, int y, int width, int height);
+void push_cliprect(int x, int y, int width, int height, bool intersect);
 
 // 弹出剪裁矩形
 void pop_cliprect();
@@ -942,7 +942,7 @@ vec4ub pen_color();
  * a                透明度
  */
 void pen_color(BYTE r, BYTE g, BYTE b, BYTE a = 255);
-void pen_color(COLORREF argb);
+void pen_color(DWORD argb);
 void pen_color(vec4ub rgba);
 
 // 获取画笔宽度
@@ -983,7 +983,7 @@ vec4ub fill_color();
  * a                透明度
  */
 void fill_color(BYTE r, BYTE g, BYTE b, BYTE a = 255);
-void fill_color(COLORREF argb);
+void fill_color(DWORD argb);
 void fill_color(vec4ub rgba);
 
 /* 绘制一个点
@@ -1136,7 +1136,7 @@ vec4ub text_color();
  * a                透明度
  */
 void text_color(BYTE r, BYTE g, BYTE b, BYTE a = 255);
-void text_color(COLORREF abgr);
+void text_color(DWORD abgr);
 void text_color(vec4ub rgba);
 
 // 输出文字

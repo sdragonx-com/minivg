@@ -1444,7 +1444,7 @@ MINIVG_INLINE void cliprect(int x, int y, int width, int height)
 }
 
 // 压入剪裁矩形
-MINIVG_INLINE void push_cliprect(int x, int y, int width, int height)
+MINIVG_INLINE void push_cliprect(int x, int y, int width, int height, bool intersect)
 {
     if (detail::instance().g) {
         if (detail::instance().g->IsClipEmpty()) {
@@ -1455,7 +1455,7 @@ MINIVG_INLINE void push_cliprect(int x, int y, int width, int height)
             detail::instance().g->GetClipBounds(&rect);
             detail::instance().clipStack.push_back(rect);
         }
-        detail::instance().g->SetClip(Gdiplus::Rect(x, y, width, height));
+        detail::instance().g->SetClip(Gdiplus::Rect(x, y, width, height), intersect ? Gdiplus::CombineModeIntersect : Gdiplus::CombineModeReplace);
     }
 }
 
@@ -1566,7 +1566,7 @@ MINIVG_INLINE void pen_color(BYTE r, BYTE g, BYTE b, BYTE a)
         detail::instance().pen->SetColor(Gdiplus::Color(a, r, g, b));
 }
 
-MINIVG_INLINE void pen_color(COLORREF argb)
+MINIVG_INLINE void pen_color(DWORD argb)
 {
     if (detail::instance().pen)
         detail::instance().pen->SetColor(Gdiplus::Color(argb));
@@ -1634,10 +1634,11 @@ MINIVG_INLINE void fill_color(BYTE r, BYTE g, BYTE b, BYTE a)
         detail::instance().brush->SetColor(Gdiplus::Color(a, r, g, b));
 }
 
-MINIVG_INLINE void fill_color(COLORREF argb)
+MINIVG_INLINE void fill_color(DWORD argb)
 {
-    if (detail::instance().brush)
+    if (detail::instance().brush) {
         detail::instance().brush->SetColor(Gdiplus::Color(argb));
+    }
 }
 
 MINIVG_INLINE void fill_color(vec4ub rgba)
@@ -1895,12 +1896,10 @@ MINIVG_INLINE void text_color(BYTE r, BYTE g, BYTE b, BYTE a)
         detail::instance().textBrush->SetColor(Gdiplus::Color(a, r, g, b));
 }
 
-MINIVG_INLINE void text_color(COLORREF argb)
+MINIVG_INLINE void text_color(DWORD argb)
 {
     if (detail::instance().textBrush) {
-        Gdiplus::Color color;
-        color.SetFromCOLORREF(argb);
-        detail::instance().textBrush->SetColor(color);
+        detail::instance().textBrush->SetColor(Gdiplus::Color(argb));
     }
 }
 
